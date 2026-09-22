@@ -1,0 +1,34 @@
+name: Mina Radar Bot
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install requests feedparser
+
+      - name: Run bot script
+        run: |
+          python bot.py
+
+      - name: Save sent news state
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Update sent news history"
+          file_pattern: sent_news.txt
