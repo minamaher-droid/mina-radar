@@ -53,7 +53,7 @@ def send_telegram_message(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_IDS:
         print("Telegram tokens or chat IDs are missing!")
         return
-
+    
     for chat_id in TELEGRAM_CHAT_IDS:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
@@ -64,7 +64,7 @@ def send_telegram_message(text):
         try:
             response = requests.post(url, json=payload)
             response.raise_for_status()
-            time.sleep(1) # فاصل زمني لتجنب حظر تليجرام (Too Many Requests)
+            time.sleep(1)
         except Exception as e:
             print(f"Error sending message to Telegram (Chat ID: {chat_id}): {e}")
 
@@ -78,7 +78,7 @@ def check_telegram_commands():
             for update in response["result"]:
                 message = update.get("message", {})
                 text = message.get("text", "").strip().lower()
-
+                
                 if text in ["/deputies", "/nawap", "النواب"]:
                     send_telegram_message(DEPUTIES_INFO)
     except Exception as e:
@@ -96,44 +96,45 @@ def save_sent_news(sent_set):
             f.write(f"{link}\n")
 
 def main():
-    # فحص الأوامر الواردة (مثل طلب النواب)
+    # فحص الأوامر الواردة
     check_telegram_commands()
 
     sent_news = load_sent_news()
     new_links_added = False
-
-    # تحديد نطاق آخر 24 ساعة بدقة
+    news_found_count = 0
+    
     now = datetime.now()
     time_limit = now - timedelta(hours=24)
 
     for rss_url in RSS_URLS:
         feed = feedparser.parse(rss_url)
-
+        
         for entry in reversed(feed.entries):
             link = entry.link
             title = entry.title
-
-            # قراءة تاريخ نشر الخبر
+            
             published_parsed = getattr(entry, "published_parsed", None)
             if published_parsed:
                 entry_date = datetime(*published_parsed[:6])
-
-                # لو الخبر أقدم من 24 ساعة، نتجاهله تماماً (ونضيفه للقائمة كأنه أرسل لمنع تكرار فحصه)
                 if entry_date < time_limit:
                     if link not in sent_news:
                         sent_news.add(link)
                         new_links_added = True
                     continue
 
-            # لو الخبر جديد وداخل الـ 24 ساعة ولم يُرسل من قبل
             if link not in sent_news:
                 message = f"📡 **مينا رادار - خبر جديد**\n\n📌 {title}\n🔗 {link}"
                 send_telegram_message(message)
                 sent_news.add(link)
                 new_links_added = True
+                news_found_count += 1
 
     if new_links_added:
         save_sent_news(sent_news)
+
+    # إذا انتهى الفحص ولم يتم العثور على أي أخبار جديدة في آخر 24 ساعة
+    if news_found_count == 0:
+        send_telegram_message("📡 **مينا رادار:** تم الانتهاء من الفحص الشامل لآخر 24 ساعة، ولم يتم العثور على أي أخبار جديدة تخص حزب العدل حالياً.")
 
 if __name__ == "__main__":
     main()
