@@ -26,7 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests feedparser
+          pip install requests feedparser beautifulsoup4
 
       - name: Run bot script
         run: |
