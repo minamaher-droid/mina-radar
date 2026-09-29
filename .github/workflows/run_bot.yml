@@ -37,3 +37,6 @@ jobs:
         with:
           commit_message: "Update sent news history"
           file_pattern: sent_news.txt
+- name: Install dependencies
+      run: |
+        pip install requests feedparser beautifulsoup4
