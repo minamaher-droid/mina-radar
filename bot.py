@@ -17,10 +17,12 @@ import requests
 TELEGRAM_BOT_TOKEN = "8907902912:AAHhoLdD3xODWhqWOEUIBS9xf0_MqktSPw8"
 TELEGRAM_CHAT_IDS = ["6616775420", "-1004335482676"]
 
-# مصادر البحث
+# مصادر البحث بروابط محدثة ومضبوطة تماماً لجوجل نيوز
 RSS_URLS = [
-    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%B8+%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%B8+%D8%A7%D9%84%D8%B9%D8%AF%D9%84+%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar"
+    # بحث بالترميز الصحيح لكلمة حزب العدل
+    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar",
+    # بحث بالترميز الصحيح لكلمة حزب العدل مصر
+    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84%20%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar"
 ]
 
 SENT_NEWS_FILE = "sent_news.txt"
@@ -108,20 +110,28 @@ def main():
 
     for rss_url in RSS_URLS:
         feed = feedparser.parse(rss_url)
+        print(f"Checking URL: {rss_url} | Entries found: {len(feed.entries)}")
         
         for entry in reversed(feed.entries):
-            link = entry.link
-            title = entry.title
+            link = getattr(entry, "link", None)
+            title = getattr(entry, "title", "خبر بدون عنوان")
+            if not link:
+                continue
             
+            # فحص تاريخ النشر بمرونة أكبر
             published_parsed = getattr(entry, "published_parsed", None)
             if published_parsed:
-                entry_date = datetime(*published_parsed[:6])
-                if entry_date < time_limit:
-                    if link not in sent_news:
-                        sent_news.add(link)
-                        new_links_added = True
-                    continue
+                try:
+                    entry_date = datetime(*published_parsed[:6])
+                    if entry_date < time_limit:
+                        if link not in sent_news:
+                            sent_news.add(link)
+                            new_links_added = True
+                        continue
+                except Exception:
+                    pass # لو حصل أي خطأ في قراءة التاريخ، نتخطاه ونتعامل مع الخبر بشكل طبيعي
 
+            # لو الرابط جديد ومش موجود في الملف القديم، ابعته فوراً
             if link not in sent_news:
                 message = f"📡 **مينا رادار - خبر جديد**\n\n📌 {title}\n🔗 {link}"
                 send_telegram_message(message)
@@ -132,9 +142,11 @@ def main():
     if new_links_added:
         save_sent_news(sent_news)
 
-    # إذا انتهى الفحص ولم يتم العثور على أي أخبار جديدة في آخر 24 ساعة
+    # لو مفيش أخبار جديدة خالص بعد الفحص الشامل
     if news_found_count == 0:
-        send_telegram_message("📡 **مينا رادار:** تم الانتهاء من الفحص الشامل لآخر 24 ساعة، ولم يتم العثور على أي أخبار جديدة تخص حزب العدل حالياً.")
+        print("No new news found in this run.")
+        # شيل علامة الـ # من السطر اللي تحت لو مش عايز رسالة "ملقاش أخبار" تظهر كل شوية على التليجرام وتكتفي بها في الكونسول بس
+        # send_telegram_message("📡 **مينا رادار:** تم الفحص الشامل، ولا توجد أخبار جديدة خلال الـ 24 ساعة الماضية.")
 
 if __name__ == "__main__":
     main()
