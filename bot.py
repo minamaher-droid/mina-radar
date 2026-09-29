@@ -12,21 +12,22 @@ import time
 import feedparser
 from datetime import datetime, timedelta
 import requests
+from bs4 import BeautifulSoup
 
 # إعدادات التليجرام
 TELEGRAM_BOT_TOKEN = "8907902912:AAHhoLdD3xODWhqWOEUIBS9xf0_MqktSPw8"
 TELEGRAM_CHAT_IDS = ["6616775420", "-1004335482676"]
 
-# مصادر البحث الموسعة (جوجل نيوز + استعلامات ذكية لفيسبوك عبر جوجل)
+# مصادر الأخبار ومتابعة المنصات
 RSS_URLS = [
-    # 1. بحث جوجل نيوز العام
+    # أخبار جوجل الرسمية لحزب العدل
     "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84%20%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar",
-    
-    # 2. طريقة ذكية لجلب منشورات وصفحات فيسبوك المفتوحة عن حزب العدل عبر بحث جوجل المخصص
-    "https://news.google.com/rss/search?q=site%3Afacebook.com%20%D8%AD%D8%B2%D8%B8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar",
-    # 3. بحث ذكي لصفحات أو تصريحات رئيس الحزب أو القيادات على فيسبوك من خلال جوجل
-    "https://news.google.com/rss/search?q=site%3Afacebook.com%20%D8%B9%D8%A8%D8%AF%D8%A7%D9%84%D9%85%D9%86%D8%B9%D9%85%20%D8%廿%D9%85%20%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar"
+]
+
+# صفحات فيسبوك أو روابط البحث المباشر للرصد
+FACEBOOK_TARGETS = [
+    # رابط النسخة العامة لفيسبوك للبحث عن حزب العدل أو صفحة معينة
+    "https://mbasic.facebook.com/public/%D8%AD%D8%B2%D8%A8-%D8%A7%D9%84%D8%B9%D8%AF%D9%84"
 ]
 
 SENT_NEWS_FILE = "sent_news.txt"
@@ -101,51 +102,66 @@ def save_sent_news(sent_set):
         for link in sent_set:
             f.write(f"{link}\n")
 
+def scrape_facebook_basic():
+    """سحب المنشورات أو الروابط المباشرة من النسخة الخفيفة لفيسبوك بدون حظر"""
+    posts = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    for url in FACEBOOK_TARGETS:
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                # استخراج الروابط أو النصوص العامة من النسخة الأساسية الخفيفة
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    text = a.get_text().strip()
+                    # تصفية الروابط لتكون خاصة بالمنشورات أو الصفحات المتعلقة
+                    if '/story.php' in href or 'posts' in href or 'permalink' in href:
+                        if not href.startswith('http'):
+                            href = "https://mbasic.facebook.com" + href
+                        if text and len(text) > 15: # التأكد من وجود محتوى نصي ذو قيمة
+                            posts.append({"title": text, "link": href})
+        except Exception as e:
+            print(f"Error scraping Facebook: {e}")
+            
+    return posts
+
 def main():
     check_telegram_commands()
 
     sent_news = load_sent_news()
     new_links_added = False
-    news_found_count = 0
     
-    now = datetime.now()
-    time_limit = now - timedelta(hours=24)
-
+    # 1. رصد أخبار جوجل RSS
     for rss_url in RSS_URLS:
         feed = feedparser.parse(rss_url)
-        
         for entry in reversed(feed.entries):
             link = getattr(entry, "link", None)
-            title = getattr(entry, "title", "محتوى جديد")
-            if not link:
+            title = getattr(entry, "title", "خبر جديد")
+            if not link or link in sent_news:
                 continue
             
-            published_parsed = getattr(entry, "published_parsed", None)
-            if published_parsed:
-                try:
-                    entry_date = datetime(*published_parsed[:6])
-                    if entry_date < time_limit:
-                        if link not in sent_news:
-                            sent_news.add(link)
-                            new_links_added = True
-                        continue
-                except Exception:
-                    pass
+            message = f"📡 **مينا رادار - خبر جديد**\n\n📌 {title}\n🔗 {link}"
+            send_telegram_message(message)
+            sent_news.add(link)
+            new_links_added = True
 
-            if link not in sent_news:
-                # تمييز النتيجة لو كانت جاية من فيسبوك عن طريق البحث الذكي
-                source_tag = "🌐 فيسبوك / منصات" if "facebook.com" in link else "📰 خبر جديد"
-                message = f"📡 **مينا رادار - {source_tag}**\n\n📌 {title}\n🔗 {link}"
-                
-                send_telegram_message(message)
-                sent_news.add(link)
-                new_links_added = True
-                news_found_count += 1
+    # 2. رصد السوشيال ميديا ومباشرة من فيسبوك
+    fb_posts = scrape_facebook_basic()
+    for post in fb_posts:
+        link = post["link"]
+        title = post["title"]
+        if link not in sent_news:
+            message = f"📱 **مينا رادار - بوست فيسبوك**\n\n📌 {title}\n🔗 {link}"
+            send_telegram_message(message)
+            sent_news.add(link)
+            new_links_added = True
 
     if new_links_added:
         save_sent_news(sent_news)
 
-if __name__ == "__main__":
-    main()
 if __name__ == "__main__":
     main()
