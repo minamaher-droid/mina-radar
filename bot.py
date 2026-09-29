@@ -17,12 +17,16 @@ import requests
 TELEGRAM_BOT_TOKEN = "8907902912:AAHhoLdD3xODWhqWOEUIBS9xf0_MqktSPw8"
 TELEGRAM_CHAT_IDS = ["6616775420", "-1004335482676"]
 
-# مصادر البحث بروابط محدثة ومضبوطة تماماً لجوجل نيوز
+# مصادر البحث الموسعة (جوجل نيوز + استعلامات ذكية لفيسبوك عبر جوجل)
 RSS_URLS = [
-    # بحث بالترميز الصحيح لكلمة حزب العدل
+    # 1. بحث جوجل نيوز العام
     "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar",
-    # بحث بالترميز الصحيح لكلمة حزب العدل مصر
-    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84%20%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar"
+    "https://news.google.com/rss/search?q=%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84%20%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar",
+    
+    # 2. طريقة ذكية لجلب منشورات وصفحات فيسبوك المفتوحة عن حزب العدل عبر بحث جوجل المخصص
+    "https://news.google.com/rss/search?q=site%3Afacebook.com%20%D8%AD%D8%B2%D8%B8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar",
+    # 3. بحث ذكي لصفحات أو تصريحات رئيس الحزب أو القيادات على فيسبوك من خلال جوجل
+    "https://news.google.com/rss/search?q=site%3Afacebook.com%20%D8%B9%D8%A8%D8%AF%D8%A7%D9%84%D9%85%D9%86%D8%B9%D9%85%20%D8%廿%D9%85%20%D8%AD%D8%B2%D8%A8%20%D8%A7%D9%84%D8%B9%D8%AF%D9%84&hl=ar&gl=EG&ceid=EG:ar"
 ]
 
 SENT_NEWS_FILE = "sent_news.txt"
@@ -98,7 +102,6 @@ def save_sent_news(sent_set):
             f.write(f"{link}\n")
 
 def main():
-    # فحص الأوامر الواردة
     check_telegram_commands()
 
     sent_news = load_sent_news()
@@ -110,15 +113,13 @@ def main():
 
     for rss_url in RSS_URLS:
         feed = feedparser.parse(rss_url)
-        print(f"Checking URL: {rss_url} | Entries found: {len(feed.entries)}")
         
         for entry in reversed(feed.entries):
             link = getattr(entry, "link", None)
-            title = getattr(entry, "title", "خبر بدون عنوان")
+            title = getattr(entry, "title", "محتوى جديد")
             if not link:
                 continue
             
-            # فحص تاريخ النشر بمرونة أكبر
             published_parsed = getattr(entry, "published_parsed", None)
             if published_parsed:
                 try:
@@ -129,11 +130,13 @@ def main():
                             new_links_added = True
                         continue
                 except Exception:
-                    pass # لو حصل أي خطأ في قراءة التاريخ، نتخطاه ونتعامل مع الخبر بشكل طبيعي
+                    pass
 
-            # لو الرابط جديد ومش موجود في الملف القديم، ابعته فوراً
             if link not in sent_news:
-                message = f"📡 **مينا رادار - خبر جديد**\n\n📌 {title}\n🔗 {link}"
+                # تمييز النتيجة لو كانت جاية من فيسبوك عن طريق البحث الذكي
+                source_tag = "🌐 فيسبوك / منصات" if "facebook.com" in link else "📰 خبر جديد"
+                message = f"📡 **مينا رادار - {source_tag}**\n\n📌 {title}\n🔗 {link}"
+                
                 send_telegram_message(message)
                 sent_news.add(link)
                 new_links_added = True
@@ -142,11 +145,7 @@ def main():
     if new_links_added:
         save_sent_news(sent_news)
 
-    # لو مفيش أخبار جديدة خالص بعد الفحص الشامل
-    if news_found_count == 0:
-        print("No new news found in this run.")
-        # شيل علامة الـ # من السطر اللي تحت لو مش عايز رسالة "ملقاش أخبار" تظهر كل شوية على التليجرام وتكتفي بها في الكونسول بس
-        # send_telegram_message("📡 **مينا رادار:** تم الفحص الشامل، ولا توجد أخبار جديدة خلال الـ 24 ساعة الماضية.")
-
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
